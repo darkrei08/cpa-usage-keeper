@@ -280,7 +280,7 @@ func pricingLegacyCostGroupsSQL(table string) string {
 		selects = append(selects, pricingOverviewDimensionExpr(field)+" AS "+field)
 		statSelects = append(statSelects, pricingOverviewDimensionExpr(field)+" AS "+field)
 	}
-	selects = append(selects, "cost_usd", "CASE WHEN cost_available = 0 THEN 1 ELSE 0 END AS unavailable")
+	selects = append(selects, "cost_usd", "CASE WHEN cost_available = false THEN 1 ELSE 0 END AS unavailable")
 	// SQL 独立重算逐请求速度作为校验 oracle；不能改成 SUM(output_tokens)/SUM(latency_ms)。
 	const speedValid = "output_tokens > 0 AND latency_ms > 0"
 	const decodeValid = speedValid + " AND ttft_ms > 0 AND ttft_ms < latency_ms"

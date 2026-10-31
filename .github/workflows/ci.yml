@@ -142,6 +142,42 @@ jobs:
         shell: msys2 {0}
         run: go test ./cmd/... ./internal/...
 
+  postgres:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.other == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: keeper
+          POSTGRES_PASSWORD: keeperpassword123
+          POSTGRES_DB: keeper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_DRIVER: postgres
+      DATABASE_URL: postgres://keeper:keeperpassword123@localhost:5432/keeper_test?sslmode=disable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+          cache: true
+
+      - name: Run repository dialect test
+        run: go test -v -run 'Test(Config_DatabaseDriverSelection|Repository_DatabaseHasTablesDialectAgnostic|Repository_PostgresLiveRoundTrip)' ./internal/repository/test
+
   frontend:
     needs: changes
     if: ${{ needs.changes.outputs.frontend == 'true' || needs.changes.outputs.other == 'true' }}
@@ -195,6 +231,7 @@ jobs:
     needs:
       - changes
       - backend
+      - postgres
       - frontend
       - container
     runs-on: ubuntu-26.04
@@ -205,6 +242,7 @@ jobs:
           FULL_CHECK: ${{ github.event_name == 'workflow_dispatch' || inputs.full }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           CONTAINER_RESULT: ${{ needs.container.result }}
         run: |
@@ -212,7 +250,7 @@ jobs:
             exit 1
           fi
 
-          for result in "$BACKEND_RESULT" "$FRONTEND_RESULT" "$CONTAINER_RESULT"; do
+          for result in "$BACKEND_RESULT" "$POSTGRES_RESULT" "$FRONTEND_RESULT" "$CONTAINER_RESULT"; do
             if [[ "$result" == "success" ]]; then
               continue
             fi

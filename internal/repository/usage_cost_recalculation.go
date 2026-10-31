@@ -335,7 +335,7 @@ func usageCostRecalculationGroupSelect(bucketSQL string) (string, []any) {
 	}
 	parts = append(parts,
 		"SUM(cost_usd) AS total_cost",
-		"SUM(CASE WHEN cost_available = 0 THEN 1 ELSE 0 END) AS unavailable_count",
+		"SUM(CASE WHEN cost_available = false THEN 1 ELSE 0 END) AS unavailable_count",
 		"SUM(CASE WHEN cost_usd IS NULL OR cost_available IS NULL THEN 1 ELSE 0 END) AS missing_count")
 	return strings.Join(parts, ", "), args
 }

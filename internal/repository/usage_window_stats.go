@@ -49,7 +49,7 @@ const usageWindowHasUsageProjection = "MAX(CASE WHEN total_tokens > 0 OR input_t
 
 const usageWindowRawProjection = "model, COALESCE(SUM(total_tokens), 0) AS total_tokens, COALESCE(SUM(cost_usd), 0) AS cost_usd, " +
 	"COALESCE(SUM(CASE WHEN cost_usd IS NULL OR cost_available IS NULL THEN 1 ELSE 0 END), 0) AS unbackfilled_count, " +
-	"COALESCE(SUM(CASE WHEN cost_available = 0 THEN 1 ELSE 0 END), 0) AS unavailable_cost_count, " + usageWindowHasUsageProjection
+	"COALESCE(SUM(CASE WHEN cost_available = false THEN 1 ELSE 0 END), 0) AS unavailable_cost_count, " + usageWindowHasUsageProjection
 
 const usageWindowHourlyProjection = "model, COALESCE(SUM(total_tokens), 0) AS total_tokens, COALESCE(SUM(cost_usd), 0) AS cost_usd, " +
 	"COALESCE(SUM(CASE WHEN cost_usd IS NULL OR unavailable_cost_count IS NULL THEN 1 ELSE 0 END), 0) AS unbackfilled_count, " +

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"context"
+	"path/filepath"
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
@@ -106,5 +108,107 @@ func TestRepository_PostgresLiveRoundTrip(t *testing.T) {
 	}
 	if found.Value == nil || *found.Value != testVal {
 		t.Fatalf("expected value %q, got %+v", testVal, found.Value)
+	}
+}
+
+func TestRepository_PostgresLiveRoundTrip_CostAggregateBool(t *testing.T) {
+	if os.Getenv("DB_DRIVER") != "postgres" || os.Getenv("DATABASE_URL") == "" {
+		t.Skip("skipping live postgres test: DB_DRIVER=postgres and DATABASE_URL not set")
+	}
+
+	cfg := config.Config{
+		DatabaseDriver: "postgres",
+		DatabaseDSN:    os.Getenv("DATABASE_URL"),
+	}
+	db, err := repository.OpenDatabase(cfg)
+	if err != nil {
+		t.Fatalf("OpenDatabase postgres error: %v", err)
+	}
+	defer func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	}()
+
+	authIndex := fmt.Sprintf("auth_cost_test_%d", time.Now().UnixNano())
+	start := time.Now().Add(-1 * time.Hour)
+	end := time.Now().Add(1 * time.Hour)
+	cost := 0.05
+	availableFalse := false
+
+	event := entities.UsageEvent{
+		EventKey:      fmt.Sprintf("key_cost_%d", time.Now().UnixNano()),
+		AuthIndex:     authIndex,
+		Model:         "test-model",
+		Timestamp:     time.Now(),
+		TotalTokens:   100,
+		CostUSD:       &cost,
+		CostAvailable: &availableFalse,
+	}
+	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{event}); err != nil {
+		t.Fatalf("failed to insert usage event: %v", err)
+	}
+	defer db.Delete(&entities.UsageEvent{}, "auth_index = ?", authIndex)
+
+	calc, err := repository.NewUsageWindowStatsCalculator(db)
+	if err != nil {
+		t.Fatalf("NewUsageWindowStatsCalculator error: %v", err)
+	}
+
+	stats, err := calc.SumByAuthIndex(context.Background(), authIndex, start, &end)
+	if err != nil {
+		t.Fatalf("SumByAuthIndex failed: %v", err)
+	}
+	if stats.CostAvailable {
+		t.Fatalf("expected CostAvailable to be false, got true")
+	}
+}
+
+func TestRepository_CostAggregateBool_DialectAgnostic(t *testing.T) {
+	db, err := repository.OpenDatabase(config.Config{
+		DatabaseDriver: "sqlite",
+		SQLitePath:     filepath.Join(t.TempDir(), "test.db"),
+	})
+	if err != nil {
+		t.Fatalf("OpenDatabase sqlite error: %v", err)
+	}
+	defer func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	}()
+
+	authIndex := fmt.Sprintf("auth_cost_test_%d", time.Now().UnixNano())
+	start := time.Now().Add(-1 * time.Hour)
+	end := time.Now().Add(1 * time.Hour)
+	cost := 0.05
+	availableFalse := false
+
+	event := entities.UsageEvent{
+		EventKey:      fmt.Sprintf("key_cost_%d", time.Now().UnixNano()),
+		AuthIndex:     authIndex,
+		Model:         "test-model",
+		Timestamp:     time.Now(),
+		TotalTokens:   100,
+		CostUSD:       &cost,
+		CostAvailable: &availableFalse,
+	}
+	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{event}); err != nil {
+		t.Fatalf("failed to insert usage event: %v", err)
+	}
+
+	calc, err := repository.NewUsageWindowStatsCalculator(db)
+	if err != nil {
+		t.Fatalf("NewUsageWindowStatsCalculator error: %v", err)
+	}
+
+	stats, err := calc.SumByAuthIndex(context.Background(), authIndex, start, &end)
+	if err != nil {
+		t.Fatalf("SumByAuthIndex failed: %v", err)
+	}
+	if stats.CostAvailable {
+		t.Fatalf("expected CostAvailable to be false, got true")
 	}
 }
